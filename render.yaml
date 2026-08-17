@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: perfilador-clientes-puelche
+    env: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --timeout 600 --workers 2 --threads 4
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL_MULTIMODAL
+        value: gemini-2.5-pro
+      - key: GEMINI_MODEL_TEXT
+        value: gemini-2.5-pro
+      - key: PYTHON_VERSION
+        value: 3.11.9

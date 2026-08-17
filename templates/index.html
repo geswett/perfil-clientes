@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Levantamiento de Perfiles de Cargo · Puelche</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-inner">
+    <span class="brand">Puelche<span class="brand-dot">.</span></span>
+    <span class="brand-sub">Levantamiento de Perfiles de Cargo</span>
+  </div>
+</header>
+
+<main class="container">
+
+  <!-- Paso 1: datos generales -->
+  <section class="card" id="paso-datos">
+    <h2>1. Datos de la reunión</h2>
+    <div class="grid-3">
+      <label>Empresa cliente
+        <input type="text" id="empresa" placeholder="Ej: Salfa Sur">
+      </label>
+      <label>Cargo a levantar
+        <input type="text" id="cargo" placeholder="Ej: Analista de Control de Gestión Senior">
+      </label>
+      <label>Consultor/a a cargo
+        <input type="text" id="consultor" placeholder="Tu nombre">
+      </label>
+    </div>
+  </section>
+
+  <!-- Paso 2: origen del contenido -->
+  <section class="card" id="paso-origen">
+    <h2>2. Origen del levantamiento</h2>
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="audio">🎙 Audio de la reunión</button>
+      <button class="tab-btn" data-tab="imagen">📷 Foto de notas</button>
+      <button class="tab-btn" data-tab="texto">⌨️ Texto escrito</button>
+    </div>
+
+    <div class="tab-panel active" id="tab-audio">
+      <p class="hint">Sube la grabación de la reunión con el cliente (mp3, wav, m4a, etc.). Se transcribe automáticamente con Gemini.</p>
+      <input type="file" id="input-audio" accept="audio/*,.m4a">
+    </div>
+
+    <div class="tab-panel" id="tab-imagen">
+      <p class="hint">Sube o toma una foto de la hoja con las notas (manuscritas o impresas).</p>
+      <input type="file" id="input-imagen" accept="image/*" capture="environment">
+    </div>
+
+    <div class="tab-panel" id="tab-texto">
+      <p class="hint">Escribe o pega directamente las notas de la reunión.</p>
+      <textarea id="input-texto" rows="10" placeholder="Escribe aquí las notas de la reunión..."></textarea>
+    </div>
+
+    <button class="btn-primary" id="btn-procesar">Procesar con Gemini</button>
+    <div class="loading" id="loading" hidden>
+      <div class="spinner"></div>
+      <span id="loading-text">Procesando… esto puede tardar unos minutos si el audio es largo.</span>
+    </div>
+    <div class="error-box" id="error-box" hidden></div>
+  </section>
+
+  <!-- Paso 3: revisión y edición -->
+  <section class="card" id="paso-revision" hidden>
+    <h2>3. Revisa y ajusta el Perfil de Cargo</h2>
+    <p class="hint">El contenido fue generado automáticamente a partir de la reunión. Revísalo y corrígelo antes de descargar el Word — sobre todo cifras, nombres y condiciones.</p>
+
+    <details class="transcripcion-box">
+      <summary>Ver transcripción / texto original usado</summary>
+      <pre id="transcripcion-texto"></pre>
+    </details>
+
+    <form id="form-perfil">
+
+      <h3>I. Datos Generales Empresa</h3>
+      <label>Definición Empresa<textarea data-path="empresa.definicion_empresa" rows="3"></textarea></label>
+      <label>Situación Actual<textarea data-path="empresa.situacion_actual" rows="3"></textarea></label>
+      <div class="grid-2">
+        <label>Área de la que Depende<input type="text" data-path="empresa.area_de_la_que_depende"></label>
+        <label>Plazo Deseado de Ingreso<input type="text" data-path="empresa.plazo_deseado_ingreso"></label>
+        <label>Opciones de Crecimiento<input type="text" data-path="empresa.opciones_crecimiento"></label>
+        <label>Confidencialidad del Cargo<input type="text" data-path="empresa.confidencialidad_cargo"></label>
+      </div>
+
+      <h3>II. Organigrama</h3>
+      <div class="grid-2">
+        <label>Jefatura Directa<input type="text" data-path="organigrama.jefatura_directa"></label>
+        <label>Reporta Indirectamente<input type="text" data-path="organigrama.reporta_indirectamente"></label>
+        <label>Personas a Cargo Directas<input type="text" data-path="organigrama.personas_a_cargo"></label>
+        <label>Tamaño de la Empresa<input type="text" data-path="organigrama.tamano_empresa"></label>
+      </div>
+
+      <h3>III. Descripción del Cargo</h3>
+      <label>Propósito del Cargo<textarea data-path="descripcion_cargo.proposito_cargo" rows="3"></textarea></label>
+      <label>Funciones del Cargo</label>
+      <ul class="lista-editable" id="lista-funciones"></ul>
+      <button type="button" class="btn-secondary" id="btn-add-funcion">+ Agregar función</button>
+
+      <h3>IV. Requisitos para el Cargo</h3>
+      <table class="tabla-editable" id="tabla-requisitos">
+        <thead><tr><th>Requerimiento</th><th>Excluyente</th><th>Deseable</th></tr></thead>
+        <tbody></tbody>
+      </table>
+
+      <h3>V. Perfil Candidato</h3>
+      <label>Características específicas que debe tener<textarea data-path="perfil_candidato" rows="4"></textarea></label>
+
+      <h3>VI. Competencias</h3>
+      <table class="tabla-editable" id="tabla-competencias">
+        <thead><tr><th>Competencia</th><th>Definición</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <button type="button" class="btn-secondary" id="btn-add-competencia">+ Agregar competencia</button>
+
+      <h3>VII. Condiciones Laborales</h3>
+      <div class="grid-2">
+        <label>Ubicación<input type="text" data-path="condiciones_laborales.ubicacion"></label>
+        <label>Jornada Laboral<input type="text" data-path="condiciones_laborales.jornada_laboral"></label>
+        <label>Renta<input type="text" data-path="condiciones_laborales.renta"></label>
+        <label>Beneficios de la Empresa<input type="text" data-path="condiciones_laborales.beneficios"></label>
+        <label>Tipo de Contrato<input type="text" data-path="condiciones_laborales.tipo_contrato"></label>
+      </div>
+
+    </form>
+
+    <button class="btn-primary" id="btn-descargar">⬇ Descargar Word (.docx)</button>
+  </section>
+
+</main>
+
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
