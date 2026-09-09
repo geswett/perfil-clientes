@@ -4,12 +4,15 @@ import traceback
 
 import docx as docx_reader
 from flask import Flask, request, jsonify, render_template, send_file
+from werkzeug.exceptions import HTTPException
 
 import claude_service
 from docx_generator import generar_docx
 
 app = Flask(__name__)
-app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # 50 MB (fotos y archivos de transcripción)
+# 20 MB: el servidor corre en un plan gratis con poca memoria (512 MB), y un archivo muy
+# grande (sobre todo PDF, que se codifica en base64 para enviarlo a Claude) puede agotarla.
+app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024
 
 ALLOWED_TRANSCRIPCION_EXT = {".doc", ".docx", ".pdf", ".txt"}
 ALLOWED_IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
@@ -66,6 +69,33 @@ def _perfil_parece_vacio(perfil: dict) -> bool:
     if not (perfil.get("empresa") or {}).get("definicion_empresa"):
         return True
     return False
+
+
+@app.errorhandler(413)
+def _handle_too_large(e):
+    """El archivo supera MAX_CONTENT_LENGTH. Sin este handler, Flask devuelve una página HTML
+    de error en vez de JSON, y el frontend truena con 'Unexpected token <' al intentar leerla
+    como JSON."""
+    max_mb = app.config["MAX_CONTENT_LENGTH"] // (1024 * 1024)
+    return jsonify({
+        "error": f"El archivo es demasiado grande (máximo {max_mb} MB). Prueba con un archivo "
+                 f"más liviano o comprímelo antes de subirlo."
+    }), 413
+
+
+@app.errorhandler(HTTPException)
+def _handle_http_exception(e):
+    """Red de seguridad general: cualquier error HTTP de Flask/Werkzeug (404, 400, 500 de
+    infraestructura, etc.) que no pase por el try/except de las rutas debe devolver JSON
+    igual, para que el frontend nunca reciba una página HTML donde espera JSON."""
+    return jsonify({"error": e.description or str(e)}), e.code or 500
+
+
+@app.errorhandler(Exception)
+def _handle_unexpected_exception(e):
+    """Red de seguridad final para cualquier excepción no manejada explícitamente."""
+    traceback.print_exc()
+    return jsonify({"error": f"Error inesperado del servidor: {e}"}), 500
 
 
 @app.route("/")
