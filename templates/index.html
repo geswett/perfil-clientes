@@ -36,19 +36,21 @@
   <section class="card" id="paso-origen">
     <h2>2. Origen del levantamiento</h2>
     <div class="tabs">
-      <button class="tab-btn active" data-tab="audio">🎙 Audio de la reunión</button>
+      <button class="tab-btn active" data-tab="transcripcion">📝 Transcripción de la reunión</button>
       <button class="tab-btn" data-tab="imagen">📷 Foto de notas</button>
       <button class="tab-btn" data-tab="texto">⌨️ Texto escrito</button>
     </div>
 
-    <div class="tab-panel active" id="tab-audio">
-      <p class="hint">Sube la grabación de la reunión con el cliente (mp3, wav, m4a, etc.). Se transcribe automáticamente con Gemini.</p>
-      <input type="file" id="input-audio" accept="audio/*,.m4a">
+    <div class="tab-panel active" id="tab-transcripcion">
+      <p class="hint">Sube el archivo de la transcripción (.txt o .docx) que ya generaste con otra herramienta (Zoom, Meet, Gemini, Otter, etc.), o pégala directamente abajo.</p>
+      <input type="file" id="input-transcripcion" accept=".txt,.docx">
+      <p class="hint" style="margin-top:12px;">— o pega el texto directamente —</p>
+      <textarea id="input-transcripcion-texto" rows="8" placeholder="Pega aquí la transcripción de la reunión..."></textarea>
     </div>
 
     <div class="tab-panel" id="tab-imagen">
       <p class="hint">Sube o toma una foto de la hoja con las notas (manuscritas o impresas).</p>
-      <input type="file" id="input-imagen" accept="image/*" capture="environment">
+      <input type="file" id="input-imagen" accept=".jpg,.jpeg,.png,.webp,.gif" capture="environment">
     </div>
 
     <div class="tab-panel" id="tab-texto">
@@ -56,10 +58,10 @@
       <textarea id="input-texto" rows="10" placeholder="Escribe aquí las notas de la reunión..."></textarea>
     </div>
 
-    <button class="btn-primary" id="btn-procesar">Procesar con Gemini</button>
+    <button class="btn-primary" id="btn-procesar">Procesar con Claude</button>
     <div class="loading" id="loading" hidden>
       <div class="spinner"></div>
-      <span id="loading-text">Procesando… esto puede tardar unos minutos si el audio es largo.</span>
+      <span id="loading-text">Procesando…</span>
     </div>
     <div class="error-box" id="error-box" hidden></div>
   </section>
