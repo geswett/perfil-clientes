@@ -53,6 +53,21 @@ def extraer_texto_de_archivo(tmp_path: str, ext: str) -> str:
     raise ValueError(f"Extensión no soportada para transcripción: {ext}")
 
 
+def _perfil_parece_vacio(perfil: dict) -> bool:
+    """Chequeo de seguridad: si Claude devuelve el Perfil de Cargo con las secciones
+    principales vacías (por ejemplo, por un problema con el schema o con la respuesta de la
+    API), es mejor avisar con un error claro que mostrar un formulario en blanco sin
+    explicación."""
+    secciones_objeto = ["empresa", "organigrama", "descripcion_cargo", "condiciones_laborales"]
+    if any(not perfil.get(s) for s in secciones_objeto):
+        return True
+    if not perfil.get("requisitos") or not perfil.get("competencias"):
+        return True
+    if not (perfil.get("empresa") or {}).get("definicion_empresa"):
+        return True
+    return False
+
+
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -126,6 +141,13 @@ def procesar():
             raw_text = claude_service.transcribe_image(tmp_path, mime_type)
 
         perfil = claude_service.structure_profile(raw_text, empresa=empresa, cargo=cargo)
+
+        if _perfil_parece_vacio(perfil):
+            return jsonify({
+                "error": "Claude leyó el contenido pero no logró estructurar el Perfil de Cargo "
+                         "correctamente (quedó vacío). Prueba de nuevo — normalmente basta con "
+                         "reintentar. Si vuelve a pasar, avísale a quien mantiene esta herramienta."
+            }), 502
 
         return jsonify({
             "transcripcion": raw_text,

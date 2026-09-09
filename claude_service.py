@@ -23,7 +23,7 @@ import os
 import anthropic
 from PIL import Image
 
-from schema import PerfilCargo, REQUISITOS_FILAS
+from schema import REQUISITOS_FILAS
 
 MODEL_TEXT = os.environ.get("CLAUDE_MODEL_TEXT", "claude-sonnet-5")
 MODEL_VISION = os.environ.get("CLAUDE_MODEL_VISION", "claude-sonnet-5")
@@ -168,6 +168,113 @@ def extract_pdf_text(file_path: str) -> str:
     return "".join(block.text for block in response.content if block.type == "text")
 
 
+def _perfil_json_schema() -> dict:
+    """Esquema JSON del Perfil de Cargo para el tool use de Claude.
+
+    IMPORTANTE: está escrito completamente "plano", sin $ref/$defs (a diferencia de un
+    schema generado automáticamente por Pydantic con model_json_schema()). Claude no resuelve
+    bien las referencias anidadas de ese tipo de schema — con $ref, los objetos anidados
+    (empresa, organigrama, etc.) le llegan sin ninguna pista de qué campos deben tener, y el
+    resultado es que los devuelve vacíos aunque el resto del texto se haya leído bien. Si se
+    vuelve a generar este schema desde schema.py en el futuro, hay que aplanarlo igual que acá.
+    """
+
+    def s(desc):
+        return {"type": "string", "description": desc}
+
+    return {
+        "type": "object",
+        "properties": {
+            "empresa": {
+                "type": "object",
+                "description": "Datos generales de la empresa cliente.",
+                "properties": {
+                    "definicion_empresa": s("Breve descripción de la empresa: rubro, tamaño, cobertura, trayectoria."),
+                    "situacion_actual": s("Contexto y motivo de la búsqueda: por qué se abre o crea este cargo ahora."),
+                    "area_de_la_que_depende": s("Gerencia o área a la que pertenece el cargo."),
+                    "plazo_deseado_ingreso": s("Plazo en el que el cliente espera que la persona seleccionada ingrese. 'Por definir' si no se menciona."),
+                    "opciones_crecimiento": s("Proyección de carrera / crecimiento futuro del cargo, si se menciona."),
+                    "confidencialidad_cargo": s("Si el proceso es confidencial o abierto. 'Por definir' si no se menciona."),
+                },
+                "required": [
+                    "definicion_empresa", "situacion_actual", "area_de_la_que_depende",
+                    "plazo_deseado_ingreso", "opciones_crecimiento", "confidencialidad_cargo",
+                ],
+            },
+            "organigrama": {
+                "type": "object",
+                "description": "A quién reporta el cargo y tamaño de la empresa.",
+                "properties": {
+                    "jefatura_directa": s("Nombre y cargo de la jefatura directa a quien reporta la posición."),
+                    "reporta_indirectamente": s("A quién reporta indirectamente, si aplica. 'No aplica' si no se menciona."),
+                    "personas_a_cargo": s("Cantidad y tipo de personas a cargo directas, o liderazgo funcional/transversal."),
+                    "tamano_empresa": s("Tamaño de la empresa: dotación, facturación, sucursales, líneas de negocio, si se mencionan."),
+                },
+                "required": ["jefatura_directa", "reporta_indirectamente", "personas_a_cargo", "tamano_empresa"],
+            },
+            "descripcion_cargo": {
+                "type": "object",
+                "description": "Propósito y funciones del cargo.",
+                "properties": {
+                    "nombre_cargo": s("Nombre / título del cargo a buscar."),
+                    "proposito_cargo": s("Propósito general del cargo: su rol y aporte a la cadena de valor de la empresa."),
+                    "funciones_cargo": {
+                        "type": "array",
+                        "description": "Lista de funciones principales del cargo, redactadas como acciones (verbo en infinitivo al inicio de cada una).",
+                        "items": {"type": "string"},
+                    },
+                },
+                "required": ["nombre_cargo", "proposito_cargo", "funciones_cargo"],
+            },
+            "requisitos": {
+                "type": "array",
+                "description": f"Debe contener exactamente estas 6 filas, en este orden: {', '.join(REQUISITOS_FILAS)}.",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "requerimiento": s("Nombre de la fila, ej. 'Formación', 'Experiencia', 'Licencia', etc."),
+                        "excluyente": s("Requisito obligatorio/excluyente para esa fila. 'No requerido' si no aplica."),
+                        "deseable": s("Requisito deseable pero no obligatorio para esa fila. 'No requerido' si no aplica."),
+                    },
+                    "required": ["requerimiento", "excluyente", "deseable"],
+                },
+            },
+            "perfil_candidato": s(
+                "Características específicas que debe tener el/la candidato/a ideal: rasgos, "
+                "forma de trabajo, lo que NO se busca, etc."
+            ),
+            "competencias": {
+                "type": "array",
+                "description": "Entre 5 y 9 competencias clave para el cargo, cada una con su definición aplicada al contexto del cargo.",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "competencia": s("Nombre corto de la competencia."),
+                        "definicion": s("Definición de en qué consiste esa competencia para este cargo."),
+                    },
+                    "required": ["competencia", "definicion"],
+                },
+            },
+            "condiciones_laborales": {
+                "type": "object",
+                "description": "Condiciones de trabajo ofrecidas.",
+                "properties": {
+                    "ubicacion": s("Ciudad / lugar de trabajo."),
+                    "jornada_laboral": s("Días y horario de trabajo. 'Por definir' si no se menciona."),
+                    "renta": s("Renta ofrecida (líquida o bruta, según se mencione). 'Por definir' si no se menciona."),
+                    "beneficios": s("Beneficios ofrecidos por la empresa. 'Por confirmar' si no se menciona."),
+                    "tipo_contrato": s("Tipo de contrato (plazo fijo, indefinido, honorarios, etc.)."),
+                },
+                "required": ["ubicacion", "jornada_laboral", "renta", "beneficios", "tipo_contrato"],
+            },
+        },
+        "required": [
+            "empresa", "organigrama", "descripcion_cargo", "requisitos",
+            "perfil_candidato", "competencias", "condiciones_laborales",
+        ],
+    }
+
+
 def structure_profile(raw_text: str, empresa: str = "", cargo: str = "") -> dict:
     """Estructura un texto en bruto (transcripción, OCR de notas, o texto escrito) en el
     esquema PerfilCargo, usando tool use de Claude para forzar una salida JSON válida."""
@@ -214,7 +321,7 @@ Instrucciones:
         "name": "estructurar_perfil_cargo",
         "description": "Estructura el contenido de la reunión con el cliente en el formato "
                         "de Perfil de Cargo de Puelche.",
-        "input_schema": PerfilCargo.model_json_schema(),
+        "input_schema": _perfil_json_schema(),
     }
 
     response = _create_with_fallback(
