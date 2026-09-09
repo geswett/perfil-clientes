@@ -57,14 +57,8 @@ document.getElementById("btn-procesar").addEventListener("click", async () => {
 
   if (currentTab === "transcripcion") {
     const file = document.getElementById("input-transcripcion").files[0];
-    const texto = document.getElementById("input-transcripcion-texto").value.trim();
-    if (file) {
-      formData.append("archivo", file);
-    } else if (texto) {
-      formData.append("texto", texto);
-    } else {
-      return showError("Sube el archivo de la transcripción o pega el texto primero.");
-    }
+    if (!file) return showError("Sube el archivo de la transcripción primero.");
+    formData.append("archivo", file);
   } else if (currentTab === "imagen") {
     const file = document.getElementById("input-imagen").files[0];
     if (!file) return showError("Selecciona o toma una foto primero.");

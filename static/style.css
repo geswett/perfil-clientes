@@ -28,13 +28,11 @@ body {
   align-items: baseline;
   gap: 14px;
 }
-.brand {
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: 0.5px;
+.brand-logo {
+  height: 40px;
+  width: auto;
+  display: block;
 }
-.brand-dot { color: var(--green); }
 .brand-sub { color: #666; font-size: 14px; }
 
 .container {
