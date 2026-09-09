@@ -9,7 +9,7 @@
 <body>
 <header class="topbar">
   <div class="topbar-inner">
-    <span class="brand">Puelche<span class="brand-dot">.</span></span>
+    <img class="brand-logo" src="{{ url_for('static', filename='puelche_logo.jpg') }}" alt="Puelche Human Consulting">
     <span class="brand-sub">Levantamiento de Perfiles de Cargo</span>
   </div>
 </header>
@@ -42,10 +42,8 @@
     </div>
 
     <div class="tab-panel active" id="tab-transcripcion">
-      <p class="hint">Sube el archivo de la transcripción (.txt o .docx) que ya generaste con otra herramienta (Zoom, Meet, Gemini, Otter, etc.), o pégala directamente abajo.</p>
-      <input type="file" id="input-transcripcion" accept=".txt,.docx">
-      <p class="hint" style="margin-top:12px;">— o pega el texto directamente —</p>
-      <textarea id="input-transcripcion-texto" rows="8" placeholder="Pega aquí la transcripción de la reunión..."></textarea>
+      <p class="hint">Sube el archivo de la transcripción (.doc, .docx, .pdf o .txt) que ya generaste con otra herramienta (Zoom, Meet, Gemini, Otter, etc.).</p>
+      <input type="file" id="input-transcripcion" accept=".doc,.docx,.pdf,.txt">
     </div>
 
     <div class="tab-panel" id="tab-imagen">
