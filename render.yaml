@@ -6,11 +6,15 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app:app --timeout 600 --workers 2 --threads 4
     envVars:
-      - key: GEMINI_API_KEY
+      - key: ANTHROPIC_API_KEY
         sync: false
-      - key: GEMINI_MODEL_MULTIMODAL
-        value: gemini-2.5-pro
-      - key: GEMINI_MODEL_TEXT
-        value: gemini-2.5-pro
+      - key: CLAUDE_MODEL_TEXT
+        value: claude-sonnet-5
+      - key: CLAUDE_MODEL_VISION
+        value: claude-sonnet-5
+      - key: CLAUDE_MODEL_TEXT_FALLBACK
+        value: claude-haiku-4-5-20251001
+      - key: CLAUDE_MODEL_VISION_FALLBACK
+        value: claude-haiku-4-5-20251001
       - key: PYTHON_VERSION
         value: 3.11.9

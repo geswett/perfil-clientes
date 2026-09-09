@@ -2,34 +2,36 @@ import os
 import tempfile
 import traceback
 
+import docx as docx_reader
 from flask import Flask, request, jsonify, render_template, send_file
 
-import gemini_service
+import claude_service
 from docx_generator import generar_docx
 
 app = Flask(__name__)
-app.config["MAX_CONTENT_LENGTH"] = 300 * 1024 * 1024  # 300 MB (audios largos)
+app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # 50 MB (fotos y archivos de transcripción)
 
-ALLOWED_AUDIO_EXT = {".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac", ".aiff", ".webm", ".mp4"}
-ALLOWED_IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"}
+ALLOWED_TRANSCRIPCION_EXT = {".txt", ".docx"}
+ALLOWED_IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 
 MIME_BY_EXT = {
-    ".mp3": "audio/mp3",
-    ".wav": "audio/wav",
-    ".m4a": "audio/mp4",
-    ".aac": "audio/aac",
-    ".ogg": "audio/ogg",
-    ".flac": "audio/flac",
-    ".aiff": "audio/aiff",
-    ".webm": "audio/webm",
-    ".mp4": "audio/mp4",
     ".jpg": "image/jpeg",
     ".jpeg": "image/jpeg",
     ".png": "image/png",
     ".webp": "image/webp",
-    ".heic": "image/heic",
-    ".heif": "image/heif",
+    ".gif": "image/gif",
 }
+
+
+def extraer_texto_de_archivo(tmp_path: str, ext: str) -> str:
+    """Extrae el texto plano de un archivo de transcripción ya hecho (.txt o .docx)."""
+    if ext == ".txt":
+        with open(tmp_path, "r", encoding="utf-8", errors="replace") as f:
+            return f.read().strip()
+    elif ext == ".docx":
+        documento = docx_reader.Document(tmp_path)
+        return "\n".join(p.text for p in documento.paragraphs if p.text.strip())
+    raise ValueError(f"Extensión no soportada para transcripción: {ext}")
 
 
 @app.route("/")
@@ -44,13 +46,14 @@ def healthz():
 
 @app.route("/api/procesar", methods=["POST"])
 def procesar():
-    """Recibe audio, imagen o texto y devuelve el Perfil de Cargo estructurado."""
+    """Recibe una transcripción (pegada o en archivo), una foto de notas, o texto escrito,
+    y devuelve el Perfil de Cargo estructurado con Claude."""
     modo = request.form.get("modo")
     empresa = request.form.get("empresa", "").strip()
     cargo = request.form.get("cargo", "").strip()
 
-    if modo not in ("audio", "imagen", "texto"):
-        return jsonify({"error": "Modo inválido. Debe ser 'audio', 'imagen' o 'texto'."}), 400
+    if modo not in ("transcripcion", "imagen", "texto"):
+        return jsonify({"error": "Modo inválido. Debe ser 'transcripcion', 'imagen' o 'texto'."}), 400
 
     tmp_path = None
     try:
@@ -59,31 +62,51 @@ def procesar():
             if not raw_text:
                 return jsonify({"error": "No se recibió texto para procesar."}), 400
 
-        else:
+        elif modo == "transcripcion":
+            # Acepta texto pegado directamente O un archivo .txt/.docx ya transcrito.
+            texto_pegado = request.form.get("texto", "").strip()
+            archivo = request.files.get("archivo")
+
+            if archivo and archivo.filename:
+                ext = os.path.splitext(archivo.filename)[1].lower()
+                if ext not in ALLOWED_TRANSCRIPCION_EXT:
+                    return jsonify({
+                        "error": f"Formato '{ext}' no soportado para transcripción. "
+                                 f"Formatos permitidos: {', '.join(sorted(ALLOWED_TRANSCRIPCION_EXT))}"
+                    }), 400
+                with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
+                    archivo.save(tmp.name)
+                    tmp_path = tmp.name
+                raw_text = extraer_texto_de_archivo(tmp_path, ext)
+            elif texto_pegado:
+                raw_text = texto_pegado
+            else:
+                return jsonify({"error": "Pega el texto de la transcripción o sube un archivo .txt/.docx."}), 400
+
+            if not raw_text.strip():
+                return jsonify({"error": "La transcripción está vacía."}), 400
+
+        else:  # modo == "imagen"
             archivo = request.files.get("archivo")
             if not archivo or archivo.filename == "":
                 return jsonify({"error": "No se recibió ningún archivo."}), 400
 
             ext = os.path.splitext(archivo.filename)[1].lower()
-            allowed = ALLOWED_AUDIO_EXT if modo == "audio" else ALLOWED_IMAGE_EXT
-            if ext not in allowed:
+            if ext not in ALLOWED_IMAGE_EXT:
                 return jsonify({
-                    "error": f"Formato '{ext}' no soportado para {modo}. "
-                             f"Formatos permitidos: {', '.join(sorted(allowed))}"
+                    "error": f"Formato '{ext}' no soportado para fotos. "
+                             f"Formatos permitidos: {', '.join(sorted(ALLOWED_IMAGE_EXT))}"
                 }), 400
 
-            mime_type = MIME_BY_EXT.get(ext, "application/octet-stream")
+            mime_type = MIME_BY_EXT.get(ext, "image/jpeg")
 
             with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
                 archivo.save(tmp.name)
                 tmp_path = tmp.name
 
-            if modo == "audio":
-                raw_text = gemini_service.transcribe_audio(tmp_path, mime_type)
-            else:
-                raw_text = gemini_service.transcribe_image(tmp_path, mime_type)
+            raw_text = claude_service.transcribe_image(tmp_path, mime_type)
 
-        perfil = gemini_service.structure_profile(raw_text, empresa=empresa, cargo=cargo)
+        perfil = claude_service.structure_profile(raw_text, empresa=empresa, cargo=cargo)
 
         return jsonify({
             "transcripcion": raw_text,
