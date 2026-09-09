@@ -3,7 +3,7 @@
 Herramienta web interna para levantar Perfiles de Cargo a partir de reuniones con clientes,
 de tres formas:
 
-1. **Transcripción de la reunión** — pega el texto o sube el archivo (.txt/.docx) de una
+1. **Transcripción de la reunión** — sube el archivo (.doc, .docx, .pdf o .txt) de una
    transcripción ya hecha con otra herramienta (Zoom, Meet, la app de Gemini, Otter, etc.).
    Esta app **no** graba ni transcribe audio — solo toma una transcripción que ya tengas.
 2. **Foto de notas** — sube una foto de una hoja con notas manuscritas o impresas; se hace OCR
@@ -91,9 +91,17 @@ Abre http://localhost:5000 en el navegador.
   de cualquier suscripción de Claude/Cowork que el equipo use para chatear — son sistemas de
   facturación separados.
 - **Ya no se usa Gemini ni se sube/transcribe audio automáticamente**: la pestaña "Transcripción
-  de la reunión" espera que la transcripción ya venga hecha (pegada como texto, o en un archivo
-  .txt/.docx) — por ejemplo, generada con la app de Gemini, Zoom, Meet, Otter, etc. por fuera de
-  esta herramienta. La app solo toma ese texto y arma el Perfil de Cargo con Claude.
+  de la reunión" espera que la transcripción ya venga hecha, en un archivo .doc, .docx, .pdf o
+  .txt — por ejemplo, generada con la app de Gemini, Zoom, Meet, Otter, etc. por fuera de esta
+  herramienta. La app solo toma ese archivo y arma el Perfil de Cargo con Claude. Los PDF los lee
+  directamente Claude (funciona incluso si el PDF es una imagen escaneada, vía OCR).
+- **Sobre los archivos .doc (formato antiguo de Word, antes de 2007)**: la app intenta leerlos,
+  pero no hay una forma 100% confiable de hacerlo sin instalar software adicional (LibreOffice)
+  en el servidor — algo que dejamos fuera por ahora para no complicar el despliegue gratuito en
+  Render. Si un .doc no se puede leer, la app pide que se convierta a .docx o PDF (2 clics en
+  Word: "Guardar como" o "Exportar"). Si en la práctica esto pasa seguido con archivos reales del
+  equipo, avísame y agregamos soporte completo para .doc (implica cambiar el despliegue a Docker
+  en Render).
 - **Errores temporales de Claude (saturación, error 529/429)**: pueden pasar en horas de alta
   demanda. La app ya reintenta automáticamente (el SDK de Anthropic reintenta solo unas veces) y,
   si el modelo principal sigue sin responder, prueba una vez con un modelo de respaldo más rápido

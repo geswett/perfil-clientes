@@ -1,13 +1,15 @@
 """Funciones que hablan con la API de Anthropic (Claude):
 
 1. transcribe_image()   -> transcribe una foto de una hoja (manuscrita o impresa) a texto.
-2. structure_profile()  -> toma el texto en bruto (transcripción pegada/subida, OCR de una
-   foto, o texto escrito en computador) y lo estructura en el esquema PerfilCargo definido
-   en schema.py.
+2. extract_pdf_text()   -> extrae/transcribe el texto de un PDF (incluye PDFs escaneados).
+3. structure_profile()  -> toma el texto en bruto (transcripción subida, OCR de una foto,
+   texto de un PDF, o texto escrito en computador) y lo estructura en el esquema PerfilCargo
+   definido en schema.py.
 
 Ya NO se usa la API de Gemini en ningún punto de la aplicación. El audio de la reunión ya no
-se sube ni se transcribe automáticamente: se espera que la transcripción venga hecha de antes
-(pegada como texto o subida como archivo) — ver la función extraer_texto_de_archivo() en app.py.
+se sube ni se transcribe automáticamente: se espera que la transcripción venga hecha de antes,
+subida como archivo (.doc, .docx, .pdf o .txt) — ver la función extraer_texto_de_archivo() en
+app.py.
 
 El modelo se puede ajustar con las variables de entorno CLAUDE_MODEL_TEXT (para estructurar
 el perfil) y CLAUDE_MODEL_VISION (para leer fotos). Por defecto se usa claude-sonnet-5 en
@@ -124,6 +126,41 @@ def transcribe_image(file_path: str, mime_type: str) -> str:
             "role": "user",
             "content": [
                 {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": data}},
+                {"type": "text", "text": prompt},
+            ],
+        }],
+    )
+    return "".join(block.text for block in response.content if block.type == "text")
+
+
+def extract_pdf_text(file_path: str) -> str:
+    """Extrae/transcribe el texto completo de un PDF (transcripción, notas escaneadas, etc.).
+
+    Claude lee el PDF directamente como documento (funciona tanto para PDFs con texto real
+    como para PDFs escaneados/imágenes, haciendo OCR internamente), así que no hace falta
+    ninguna librería extra de por medio."""
+    client = _get_client()
+    with open(file_path, "rb") as f:
+        data = base64.standard_b64encode(f.read()).decode("utf-8")
+
+    prompt = (
+        "Este PDF contiene la transcripción o notas de una reunión de levantamiento de perfil "
+        "de cargo con un cliente. Extrae y transcribe TODO el texto contenido en el documento, "
+        "en español, respetando el orden en que aparece. Si el PDF es una imagen escaneada, "
+        "transcribe lo que puedas leer con OCR; si alguna parte es realmente ilegible, escribe "
+        "'[ilegible]' en su lugar en vez de inventar contenido. Devuelve solo el texto "
+        "extraído, sin comentarios adicionales."
+    )
+
+    response = _create_with_fallback(
+        client,
+        MODEL_VISION,
+        FALLBACK_MODEL_VISION,
+        max_tokens=8192,
+        messages=[{
+            "role": "user",
+            "content": [
+                {"type": "document", "source": {"type": "base64", "media_type": "application/pdf", "data": data}},
                 {"type": "text", "text": prompt},
             ],
         }],

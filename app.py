@@ -11,7 +11,7 @@ from docx_generator import generar_docx
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # 50 MB (fotos y archivos de transcripción)
 
-ALLOWED_TRANSCRIPCION_EXT = {".txt", ".docx"}
+ALLOWED_TRANSCRIPCION_EXT = {".doc", ".docx", ".pdf", ".txt"}
 ALLOWED_IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 
 MIME_BY_EXT = {
@@ -24,13 +24,32 @@ MIME_BY_EXT = {
 
 
 def extraer_texto_de_archivo(tmp_path: str, ext: str) -> str:
-    """Extrae el texto plano de un archivo de transcripción ya hecho (.txt o .docx)."""
+    """Extrae el texto plano de un archivo de transcripción ya hecho (.doc, .docx, .pdf o .txt)."""
     if ext == ".txt":
         with open(tmp_path, "r", encoding="utf-8", errors="replace") as f:
             return f.read().strip()
+
     elif ext == ".docx":
         documento = docx_reader.Document(tmp_path)
         return "\n".join(p.text for p in documento.paragraphs if p.text.strip())
+
+    elif ext == ".doc":
+        # .doc es el formato binario antiguo de Word (previo a 2007) — no hay forma confiable
+        # de leerlo sin instalar LibreOffice en el servidor. Lo intentamos igual por si el
+        # archivo en realidad es un .docx mal nombrado; si no, pedimos que lo conviertan.
+        try:
+            documento = docx_reader.Document(tmp_path)
+            return "\n".join(p.text for p in documento.paragraphs if p.text.strip())
+        except Exception as e:
+            raise ValueError(
+                "No se pudo leer este archivo .doc (formato antiguo de Word, previo a 2007). "
+                "Ábrelo en Word o Google Docs y guárdalo/expórtalo como .docx o PDF, y vuelve a "
+                "subirlo."
+            ) from e
+
+    elif ext == ".pdf":
+        return claude_service.extract_pdf_text(tmp_path)
+
     raise ValueError(f"Extensión no soportada para transcripción: {ext}")
 
 
@@ -46,8 +65,8 @@ def healthz():
 
 @app.route("/api/procesar", methods=["POST"])
 def procesar():
-    """Recibe una transcripción (pegada o en archivo), una foto de notas, o texto escrito,
-    y devuelve el Perfil de Cargo estructurado con Claude."""
+    """Recibe un archivo de transcripción, una foto de notas, o texto escrito, y devuelve el
+    Perfil de Cargo estructurado con Claude."""
     modo = request.form.get("modo")
     empresa = request.form.get("empresa", "").strip()
     cargo = request.form.get("cargo", "").strip()
@@ -63,25 +82,25 @@ def procesar():
                 return jsonify({"error": "No se recibió texto para procesar."}), 400
 
         elif modo == "transcripcion":
-            # Acepta texto pegado directamente O un archivo .txt/.docx ya transcrito.
-            texto_pegado = request.form.get("texto", "").strip()
             archivo = request.files.get("archivo")
+            if not archivo or not archivo.filename:
+                return jsonify({"error": "Sube el archivo de la transcripción (.doc, .docx, .pdf o .txt)."}), 400
 
-            if archivo and archivo.filename:
-                ext = os.path.splitext(archivo.filename)[1].lower()
-                if ext not in ALLOWED_TRANSCRIPCION_EXT:
-                    return jsonify({
-                        "error": f"Formato '{ext}' no soportado para transcripción. "
-                                 f"Formatos permitidos: {', '.join(sorted(ALLOWED_TRANSCRIPCION_EXT))}"
-                    }), 400
-                with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
-                    archivo.save(tmp.name)
-                    tmp_path = tmp.name
+            ext = os.path.splitext(archivo.filename)[1].lower()
+            if ext not in ALLOWED_TRANSCRIPCION_EXT:
+                return jsonify({
+                    "error": f"Formato '{ext}' no soportado para transcripción. "
+                             f"Formatos permitidos: {', '.join(sorted(ALLOWED_TRANSCRIPCION_EXT))}"
+                }), 400
+
+            with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
+                archivo.save(tmp.name)
+                tmp_path = tmp.name
+
+            try:
                 raw_text = extraer_texto_de_archivo(tmp_path, ext)
-            elif texto_pegado:
-                raw_text = texto_pegado
-            else:
-                return jsonify({"error": "Pega el texto de la transcripción o sube un archivo .txt/.docx."}), 400
+            except ValueError as e:
+                return jsonify({"error": str(e)}), 400
 
             if not raw_text.strip():
                 return jsonify({"error": "La transcripción está vacía."}), 400
