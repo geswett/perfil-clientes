@@ -86,17 +86,32 @@ def _add_heading(doc, numeral, title):
     return p
 
 
-def _add_label_value_table(doc, rows, label_width=Cm(4.5)):
+def _force_table_width(table, col_widths):
+    """Fuerza un ancho fijo, columna por columna, en TODAS las filas de la tabla.
+
+    Sin esto, Word/LibreOffice autoajusta el ancho de cada tabla a su contenido, y tablas con
+    distinta cantidad de columnas (o con una sola columna explícita, como en III) terminan con
+    anchos totales distintos entre sí aunque el documento se vea "igual de ancho" a simple
+    vista. Fijar el ancho de cada columna en cada fila (no solo a nivel de tabla) es lo que
+    garantiza que todas las tablas del documento midan exactamente lo mismo de lado a lado."""
+    table.autofit = False
+    for col, width in zip(table.columns, col_widths):
+        col.width = width
+    for row in table.rows:
+        for cell, width in zip(row.cells, col_widths):
+            cell.width = width
+
+
+def _add_label_value_table(doc, rows, content_width, label_width=Cm(4.5)):
     """rows: lista de tuplas (etiqueta, valor)."""
     table = doc.add_table(rows=len(rows), cols=2)
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
-    table.autofit = False
     _set_table_borders(table)
     for i, (label, value) in enumerate(rows):
         row = table.rows[i]
-        row.cells[0].width = label_width
         _set_cell_text(row.cells[0], label, bold=True, shading=LABEL_GREEN)
         _set_cell_text(row.cells[1], value or "Por definir", shading=WHITE)
+    _force_table_width(table, [label_width, content_width - label_width])
     doc.add_paragraph()
     return table
 
@@ -153,6 +168,12 @@ def generar_docx(perfil: dict, empresa: str, cargo: str, consultor: str = "") ->
 
     _add_header(doc)
 
+    # Ancho de contenido disponible (ancho de página menos márgenes izq/der), usado para que
+    # TODAS las tablas del documento midan exactamente lo mismo de lado a lado.
+    section = doc.sections[0]
+    content_width = section.page_width - section.left_margin - section.right_margin
+    label_width = Cm(4.5)
+
     # Título del documento
     title_p = doc.add_paragraph()
     title_run = title_p.add_run("PERFIL DE CARGO")
@@ -182,7 +203,7 @@ def generar_docx(perfil: dict, empresa: str, cargo: str, consultor: str = "") ->
         ("Plazo Deseado de Ingreso", e.get("plazo_deseado_ingreso")),
         ("Opciones de Crecimiento", e.get("opciones_crecimiento")),
         ("Confidencialidad del Cargo", e.get("confidencialidad_cargo")),
-    ])
+    ], content_width, label_width)
 
     # II. Organigrama
     o = perfil.get("organigrama", {})
@@ -192,7 +213,7 @@ def generar_docx(perfil: dict, empresa: str, cargo: str, consultor: str = "") ->
         ("Reporta Indirectamente", o.get("reporta_indirectamente")),
         ("Personas a Cargo Directas", o.get("personas_a_cargo")),
         ("Tamaño de la Empresa", o.get("tamano_empresa")),
-    ])
+    ], content_width, label_width)
 
     # III. Descripción del Cargo
     dc = perfil.get("descripcion_cargo", {})
@@ -209,6 +230,7 @@ def generar_docx(perfil: dict, empresa: str, cargo: str, consultor: str = "") ->
         _add_bullet_paragraphs(table3.rows[3].cells[0], funciones)
     else:
         _set_cell_text(table3.rows[3].cells[0], "Por definir", shading=WHITE)
+    _force_table_width(table3, [content_width])
     doc.add_paragraph()
 
     # IV. Requisitos para el Cargo
@@ -227,13 +249,16 @@ def generar_docx(perfil: dict, empresa: str, cargo: str, consultor: str = "") ->
         _set_cell_text(cells[0], nombre_fila, bold=True, shading=LABEL_GREEN)
         _set_cell_text(cells[1], r.get("excluyente") or "No requerido", shading=WHITE)
         _set_cell_text(cells[2], r.get("deseable") or "No requerido", shading=WHITE)
+    col_restante = (content_width - label_width) // 2
+    col_restante2 = content_width - label_width - col_restante  # absorbe el resto de la división entera
+    _force_table_width(table4, [label_width, col_restante, col_restante2])
     doc.add_paragraph()
 
     # V. Perfil Candidato
     _add_heading(doc, "V", "PERFIL CANDIDATO")
     _add_label_value_table(doc, [
         ("Características específicas que debe tener", perfil.get("perfil_candidato")),
-    ])
+    ], content_width, label_width)
 
     # VI. Competencias
     _add_heading(doc, "VI", "COMPETENCIAS")
@@ -251,6 +276,7 @@ def generar_docx(perfil: dict, empresa: str, cargo: str, consultor: str = "") ->
     else:
         _set_cell_text(table6.rows[1].cells[0], "Por definir", bold=True, shading=WHITE)
         _set_cell_text(table6.rows[1].cells[1], "Por definir", shading=WHITE)
+    _force_table_width(table6, [label_width, content_width - label_width])
     doc.add_paragraph()
 
     # VII. Condiciones Laborales
@@ -262,7 +288,7 @@ def generar_docx(perfil: dict, empresa: str, cargo: str, consultor: str = "") ->
         ("Renta", cl.get("renta")),
         ("Beneficios de la Empresa", cl.get("beneficios")),
         ("Tipo de Contrato", cl.get("tipo_contrato")),
-    ])
+    ], content_width, label_width)
 
     buffer = io.BytesIO()
     doc.save(buffer)
