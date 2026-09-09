@@ -44,6 +44,24 @@ function hideError() {
   document.getElementById("error-box").hidden = true;
 }
 
+// Lee la respuesta como JSON, pero si el servidor devolvió otra cosa (por ejemplo una página
+// de error HTML de Render cuando el servicio se reinicia o se demora mucho procesando un
+// archivo grande) muestra un mensaje claro en vez de que falle la lectura del JSON.
+async function parseJsonResponse(res) {
+  const contentType = res.headers.get("content-type") || "";
+  if (contentType.includes("application/json")) {
+    return res.json();
+  }
+  const texto = await res.text();
+  console.error("Respuesta no-JSON del servidor:", texto.slice(0, 500));
+  throw new Error(
+    "El servidor no respondió correctamente" + (res.status ? ` (código ${res.status})` : "") +
+    ". Esto suele pasar si el archivo es muy grande/pesado, si el procesamiento tomó demasiado " +
+    "tiempo, o si el servidor se estaba reiniciando. Prueba de nuevo en un momento, o con un " +
+    "archivo más liviano."
+  );
+}
+
 // ---------- Procesar ----------
 document.getElementById("btn-procesar").addEventListener("click", async () => {
   hideError();
@@ -76,7 +94,7 @@ document.getElementById("btn-procesar").addEventListener("click", async () => {
 
   try {
     const res = await fetch("/api/procesar", { method: "POST", body: formData });
-    const data = await res.json();
+    const data = await parseJsonResponse(res);
     if (!res.ok) {
       showError(data.error || "Ocurrió un error procesando la solicitud.");
       return;
@@ -254,7 +272,7 @@ document.getElementById("btn-descargar").addEventListener("click", async () => {
       body: JSON.stringify({ perfil, empresa, cargo, consultor }),
     });
     if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
+      const data = await parseJsonResponse(res).catch(() => ({}));
       showError(data.error || "No se pudo generar el documento.");
       return;
     }
