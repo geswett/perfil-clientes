@@ -7,7 +7,7 @@ const REQUISITOS_FILAS = [
   "Idioma",
 ];
 
-let currentTab = "audio";
+let currentTab = "transcripcion";
 let currentPerfil = null;
 
 // ---------- Tabs ----------
@@ -55,10 +55,16 @@ document.getElementById("btn-procesar").addEventListener("click", async () => {
   formData.append("empresa", empresa);
   formData.append("cargo", cargo);
 
-  if (currentTab === "audio") {
-    const file = document.getElementById("input-audio").files[0];
-    if (!file) return showError("Selecciona un archivo de audio primero.");
-    formData.append("archivo", file);
+  if (currentTab === "transcripcion") {
+    const file = document.getElementById("input-transcripcion").files[0];
+    const texto = document.getElementById("input-transcripcion-texto").value.trim();
+    if (file) {
+      formData.append("archivo", file);
+    } else if (texto) {
+      formData.append("texto", texto);
+    } else {
+      return showError("Sube el archivo de la transcripción o pega el texto primero.");
+    }
   } else if (currentTab === "imagen") {
     const file = document.getElementById("input-imagen").files[0];
     if (!file) return showError("Selecciona o toma una foto primero.");
